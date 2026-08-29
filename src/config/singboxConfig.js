@@ -56,8 +56,7 @@ export const SING_BOX_CONFIG = {
 				rcode: "REFUSED"
 			}
 		],
-		final: "dns_direct",
-		independent_cache: true
+		final: "dns_direct"
 	},
 	ntp: {
 		enabled: true,
@@ -67,10 +66,9 @@ export const SING_BOX_CONFIG = {
 	},
 	inbounds: [
 		{ type: 'mixed', tag: 'mixed-in', listen: '0.0.0.0', listen_port: 2080 },
-		{ type: 'tun', tag: 'tun-in', address: '172.19.0.1/30', auto_route: true, strict_route: true, stack: 'mixed', sniff: true }
+		{ type: 'tun', tag: 'tun-in', address: '172.19.0.1/30', auto_route: true, strict_route: true, stack: 'mixed' }
 	],
 	outbounds: [
-		{ type: 'block', tag: 'REJECT' },
 		{ type: "direct", tag: 'DIRECT' }
 	],
 	route: {
@@ -159,10 +157,9 @@ export const SING_BOX_CONFIG_V1_11 = {
 	},
 	inbounds: [
 		{ type: 'mixed', tag: 'mixed-in', listen: '0.0.0.0', listen_port: 2080 },
-		{ type: 'tun', tag: 'tun-in', address: '172.19.0.1/30', auto_route: true, strict_route: true, stack: 'mixed', sniff: true }
+		{ type: 'tun', tag: 'tun-in', address: '172.19.0.1/30', auto_route: true, strict_route: true, stack: 'mixed' }
 	],
 	outbounds: [
-		{ type: 'block', tag: 'REJECT' },
 		{ type: "direct", tag: 'DIRECT' }
 	],
 	route: {

@@ -100,6 +100,7 @@ export const UNIFIED_RULES = [
 
 // Rule names that should default to DIRECT instead of Node Select
 export const DIRECT_DEFAULT_RULES = new Set(['Private', 'Location:CN']);
+export const REJECT_ACTION_RULES = new Set(['Ad Block']);
 
 export const PREDEFINED_RULE_SETS = {
 	minimal: ['Location:CN', 'Private', 'Non-China'],
@@ -110,14 +111,14 @@ export const PREDEFINED_RULE_SETS = {
 // Generate SITE_RULE_SETS and IP_RULE_SETS from UNIFIED_RULES
 export const SITE_RULE_SETS = UNIFIED_RULES.reduce((acc, rule) => {
 	rule.site_rules.forEach(site_rule => {
-		acc[site_rule] = `geosite-${site_rule}.srs`;
+		acc[site_rule] = `${site_rule}.srs`;
 	});
 	return acc;
 }, {});
 
 export const IP_RULE_SETS = UNIFIED_RULES.reduce((acc, rule) => {
 	rule.ip_rules.forEach(ip_rule => {
-		acc[ip_rule] = `geoip-${ip_rule}.srs`;
+		acc[ip_rule] = `${ip_rule}.srs`;
 	});
 	return acc;
 }, {});

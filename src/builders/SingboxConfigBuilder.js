@@ -1,10 +1,12 @@
 
-import { SING_BOX_CONFIG, generateRuleSets, generateRules, getOutbounds, PREDEFINED_RULE_SETS, DIRECT_DEFAULT_RULES } from '../config/index.js';
+import { SING_BOX_CONFIG, generateRuleSets, generateRules, getOutbounds, PREDEFINED_RULE_SETS, DIRECT_DEFAULT_RULES, REJECT_ACTION_RULES } from '../config/index.js';
 import { BaseConfigBuilder } from './BaseConfigBuilder.js';
 import { deepCopy, groupProxiesByCountry } from '../utils.js';
 import { addProxyWithDedup } from './helpers/proxyHelpers.js';
-import { buildSelectorMembers as buildSelectorMemberList, buildNodeSelectMembers, uniqueNames } from './helpers/groupBuilder.js';
+import { buildSelectorMembers as buildSelectorMemberList, buildNodeSelectMembers, buildCustomRuleMembers, uniqueNames } from './helpers/groupBuilder.js';
 import { normalizeGroupName } from './helpers/groupNameUtils.js';
+
+const RULE_SET_HTTP_CLIENT_TAG = 'rule-set-download';
 
 export class SingboxConfigBuilder extends BaseConfigBuilder {
     constructor(inputString, selectedRules, customRules, baseConfig, lang, userAgent, groupByCountry = false, enableClashUI = false, externalController, externalUiDownloadUrl, singboxVersion = '1.12', includeAutoSelect = true) {
@@ -18,7 +20,7 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
         this.enableClashUI = enableClashUI;
         this.externalController = externalController;
         this.externalUiDownloadUrl = externalUiDownloadUrl;
-        this.singboxVersion = singboxVersion;  // '1.11' or '1.12'
+        this.singboxVersion = singboxVersion;  // '1.11', '1.12' or '1.14'
 
         if (this.config?.dns?.servers?.length > 0) {
             this.config.dns.servers[0].detour = this.t('outboundNames.Node Select');
@@ -44,11 +46,12 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
      * @returns {object[]} - Array of outbound provider objects
      */
     generateOutboundProviders() {
-        return this.providerUrls.map((url, index) => ({
-            tag: `_auto_provider_${index + 1}`,
+        const existingTags = this.getExistingProviderTags();
+        return this.getAutoProviderDescriptors(existingTags).map(({ name, url }) => ({
+            tag: name,
             type: 'http',
             download_url: url,
-            path: `./providers/_auto_provider_${index + 1}.json`,
+            path: `./providers/${name}.json`,
             download_interval: '24h',
             health_check: {
                 enabled: true,
@@ -63,7 +66,13 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
      * @returns {string[]} - Array of provider tags
      */
     getProviderTags() {
-        return this.providerUrls.map((_, index) => `_auto_provider_${index + 1}`);
+        return this.getAutoProviderDescriptors(this.getExistingProviderTags()).map(provider => provider.name);
+    }
+
+    getExistingProviderTags() {
+        return Array.isArray(this.config.outbound_providers)
+            ? this.config.outbound_providers.map(p => p?.tag).filter(Boolean)
+            : [];
     }
 
     /**
@@ -74,9 +83,7 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
         if (this.singboxVersion === '1.11') {
             return [];
         }
-        const existingTags = Array.isArray(this.config.outbound_providers)
-            ? this.config.outbound_providers.map(p => p?.tag).filter(Boolean)
-            : [];
+        const existingTags = this.getExistingProviderTags();
         const autoTags = this.getProviderTags();
         return [...new Set([...existingTags, ...autoTags])];
     }
@@ -93,10 +100,12 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
         // Create a shallow copy to avoid mutating the original
         const sanitized = { ...proxy };
 
-        // Remove Clash-specific fields that are not valid in sing-box outbound configuration
-        // In sing-box, UDP is controlled by 'network' field (defaults to both tcp and udp)
-        // The 'udp: true/false' field is a Clash/Clash Meta specific setting
+        // Strip Clash-only / mis-typed fields that conflict with sing-box semantics.
+        // `udp` is Clash-only. Top-level `network` in sing-box is a TCP/UDP allowlist
+        // (NetworkList in option/types.go); a stray "tcp" silently disables UDP for
+        // every group that selects this node — including DNS hijack and fakeip.
         delete sanitized.udp;
+        delete sanitized.network;
 
         // Remove 'alpn' from root level - it should only exist inside 'tls' object for sing-box
         // For protocols like vless/vmess, alpn belongs inside the tls configuration
@@ -138,20 +147,26 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
         return (this.config.outbounds || []).some(outbound => normalizeGroupName(outbound?.tag) === target);
     }
 
+    hasAutoSelectCandidates(proxyList = this.getProxyList()) {
+        return (Array.isArray(proxyList) && proxyList.length > 0) || this.getAllProviderTags().length > 0;
+    }
+
     addAutoSelectGroup(proxyList) {
         if (!this.includeAutoSelect) return;
         this.config.outbounds = this.config.outbounds || [];
         const tag = this.t('outboundNames.Auto Select');
         if (this.hasOutboundTag(tag)) return;
+        const providerTags = this.getAllProviderTags();
+        const autoSelectMembers = deepCopy(uniqueNames(proxyList));
+        if (autoSelectMembers.length === 0 && providerTags.length === 0) return;
 
         const group = {
             type: "urltest",
             tag,
-            outbounds: deepCopy(uniqueNames(proxyList))
+            outbounds: autoSelectMembers
         };
 
         // Add 'providers' field if we have outbound_providers
-        const providerTags = this.getAllProviderTags();
         if (providerTags.length > 0) {
             group.providers = providerTags;
         }
@@ -163,13 +178,15 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
         this.config.outbounds = this.config.outbounds || [];
         const tag = this.t('outboundNames.Node Select');
         if (this.hasOutboundTag(tag)) return;
+        const includeAutoSelect = this.includeAutoSelect && this.hasAutoSelectCandidates(proxyList);
         const members = buildNodeSelectMembers({
             proxyList,
             translator: this.t,
             groupByCountry: this.groupByCountry,
             manualGroupName: this.manualGroupName,
             countryGroupNames: this.countryGroupNames,
-            includeAutoSelect: this.includeAutoSelect
+            includeAutoSelect,
+            includeReject: false
         });
 
         const group = {
@@ -194,13 +211,15 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
             groupByCountry: this.groupByCountry,
             manualGroupName: this.manualGroupName,
             countryGroupNames: this.countryGroupNames,
-            includeAutoSelect: this.includeAutoSelect
+            includeAutoSelect: this.includeAutoSelect && this.hasAutoSelectCandidates(proxyList),
+            includeReject: false
         });
     }
 
     addOutboundGroups(outbounds, proxyList) {
         outbounds.forEach(outbound => {
             if (outbound !== this.t('outboundNames.Node Select')) {
+                if (REJECT_ACTION_RULES.has(outbound)) return;
                 let selectorMembers = this.buildSelectorMembers(proxyList);
                 const tag = this.t(`outboundNames.${outbound}`);
                 if (this.hasOutboundTag(tag)) {
@@ -222,7 +241,14 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
     addCustomRuleGroups(proxyList) {
         if (Array.isArray(this.customRules)) {
             this.customRules.forEach(rule => {
-                const selectorMembers = this.buildSelectorMembers(proxyList);
+                const includeAutoSelect = this.includeAutoSelect && this.hasAutoSelectCandidates(proxyList);
+                const selectorMembers = buildCustomRuleMembers({
+                    proxyList,
+                    translator: this.t,
+                    manualGroupName: this.manualGroupName,
+                    includeAutoSelect,
+                    includeReject: false
+                });
                 if (this.hasOutboundTag(rule.name)) return;
                 this.config.outbounds.push({
                     type: "selector",
@@ -267,6 +293,7 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
 
         const countries = Object.keys(countryGroups).sort((a, b) => a.localeCompare(b));
         const countryGroupNames = [];
+        const includeAutoSelect = this.includeAutoSelect && this.hasAutoSelectCandidates();
 
         countries.forEach(country => {
             const { emoji, name, proxies: countryProxies } = countryGroups[country];
@@ -295,7 +322,8 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
                 groupByCountry: true,
                 manualGroupName,
                 countryGroupNames,
-                includeAutoSelect: this.includeAutoSelect
+                includeAutoSelect,
+                includeReject: false
             });
             nodeSelectGroup.outbounds = rebuilt;
         }
@@ -323,7 +351,7 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
                 .map(o => normalizeGroupName(o?.tag))
                 .filter(Boolean)
         );
-        const validRefs = new Set(['DIRECT', 'REJECT', 'direct', 'block']);
+        const validRefs = new Set(['DIRECT', 'direct']);
         proxyList.forEach(n => validRefs.add(n));
         groupTags.forEach(n => validRefs.add(n));
 
@@ -397,6 +425,7 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
     validateOutbounds() {
         const proxyList = this.getProxyList();
         const providerTags = this.getAllProviderTags();
+        const invalidTags = new Set();
 
         (this.config.outbounds || []).forEach(outbound => {
             // For urltest groups, ensure they have outbounds or providers
@@ -409,6 +438,76 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
                 if (providerTags.length > 0) {
                     outbound.providers = [...providerTags];
                 }
+                if ((!outbound.outbounds || outbound.outbounds.length === 0) &&
+                    (!outbound.providers || outbound.providers.length === 0)) {
+                    invalidTags.add(normalizeGroupName(outbound.tag));
+                }
+            }
+        });
+
+        if (invalidTags.size > 0) {
+            this.config.outbounds = (this.config.outbounds || [])
+                .filter(outbound => !invalidTags.has(normalizeGroupName(outbound?.tag)))
+                .map(outbound => {
+                    if (Array.isArray(outbound.outbounds)) {
+                        outbound.outbounds = outbound.outbounds.filter(tag => !invalidTags.has(normalizeGroupName(tag)));
+                    }
+                    return outbound;
+                });
+        }
+    }
+
+    sanitizeLegacySpecialOutbounds() {
+        const legacyTags = new Set(
+            (this.config.outbounds || [])
+                .filter(outbound => outbound?.type === 'block' || outbound?.type === 'dns')
+                .map(outbound => normalizeGroupName(outbound?.tag))
+                .filter(Boolean)
+        );
+        legacyTags.add(normalizeGroupName('REJECT'));
+
+        this.config.outbounds = (this.config.outbounds || [])
+            .filter(outbound => !legacyTags.has(normalizeGroupName(outbound?.tag)))
+            .map(outbound => {
+                if (Array.isArray(outbound.outbounds)) {
+                    outbound.outbounds = outbound.outbounds.filter(tag => !legacyTags.has(normalizeGroupName(tag)));
+                }
+                return outbound;
+            })
+            .filter(outbound => {
+                if (outbound?.type !== 'selector' && outbound?.type !== 'urltest') return true;
+                return outbound.outbounds?.length > 0 || outbound.providers?.length > 0;
+            });
+    }
+
+    buildRouteTarget(rule) {
+        if (REJECT_ACTION_RULES.has(rule?.outbound) || rule?.outbound === 'REJECT') {
+            return { action: 'reject' };
+        }
+        return { outbound: this.t(`outboundNames.${rule.outbound}`) };
+    }
+
+    /**
+     * Pin remote rule-set downloads to DIRECT so fetching never depends on a
+     * proxy that may not be up yet (issue #408). sing-box 1.14 deprecates both
+     * the implicit default HTTP client and the download_detour field (removed
+     * in 1.16, issue #401), so >=1.14 gets an explicit shared HTTP client
+     * while older versions get the legacy per-rule-set field.
+     */
+    configureRuleSetDownload() {
+        if (this.singboxVersion === '1.14') {
+            if (this.config.route.default_http_client) {
+                return;
+            }
+            if (!Array.isArray(this.config.http_clients) || this.config.http_clients.length === 0) {
+                this.config.http_clients = [{ tag: RULE_SET_HTTP_CLIENT_TAG, detour: 'DIRECT' }];
+            }
+            this.config.route.default_http_client = this.config.http_clients[0].tag;
+            return;
+        }
+        this.config.route.rule_set.forEach(ruleSet => {
+            if (ruleSet?.type === 'remote' && !ruleSet.download_detour) {
+                ruleSet.download_detour = 'DIRECT';
             }
         });
     }
@@ -418,6 +517,7 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
         const { site_rule_sets, ip_rule_sets } = generateRuleSets(this.selectedRules, this.customRules);
 
         this.config.route.rule_set = [...site_rule_sets, ...ip_rule_sets];
+        this.configureRuleSetDownload();
 
         // Add outbound_providers if we have any
         if (this.providerUrls.length > 0) {
@@ -428,6 +528,7 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
 
         // Validate outbounds: fill empty urltest groups with all proxies
         this.validateOutbounds();
+        this.sanitizeLegacySpecialOutbounds();
 
         const attachProtocolIfNeeded = (entry, rule) => {
             if (Array.isArray(rule?.protocol) && rule.protocol.length > 0) {
@@ -445,13 +546,13 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
         rules.filter(rule => Array.isArray(rule.src_ip_cidr) && rule.src_ip_cidr.length > 0).map(rule => {
             this.config.route.rules.push(attachProtocolIfNeeded({
                 source_ip_cidr: rule.src_ip_cidr,
-                outbound: this.t(`outboundNames.${rule.outbound}`)
+                ...this.buildRouteTarget(rule)
             }, rule));
         });
 
         rules.filter(rule => hasMatchValues(rule.domain_suffix) || hasMatchValues(rule.domain_keyword)).map(rule => {
             const entry = {
-                outbound: this.t(`outboundNames.${rule.outbound}`)
+                ...this.buildRouteTarget(rule)
             };
 
             if (hasMatchValues(rule.domain_suffix)) entry.domain_suffix = rule.domain_suffix;
@@ -465,7 +566,7 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
                 rule_set: [
                     ...(rule.site_rules.length > 0 && rule.site_rules[0] !== '' ? rule.site_rules : []),
                 ],
-                outbound: this.t(`outboundNames.${rule.outbound}`)
+                ...this.buildRouteTarget(rule)
             }, rule));
         });
 
@@ -477,22 +578,26 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
                         .filter(ip => ip !== '')
                         .map(ip => `${ip}-ip`))
                 ],
-                outbound: this.t(`outboundNames.${rule.outbound}`)
+                ...this.buildRouteTarget(rule)
             }, rule));
         });
 
         rules.filter(rule => hasMatchValues(rule.ip_cidr)).map(rule => {
             this.config.route.rules.push(attachProtocolIfNeeded({
                 ip_cidr: rule.ip_cidr,
-                outbound: this.t(`outboundNames.${rule.outbound}`)
+                ...this.buildRouteTarget(rule)
             }, rule));
         });
 
+        // Order matters: sniff first so downstream rules can match on protocol;
+        // hijack-dns before clash_mode so DNS never escapes into a selector when
+        // the user toggles global mode (selectors only support TCP+UDP if the
+        // currently selected node does, which is fragile).
         this.config.route.rules.unshift(
-            { clash_mode: 'direct', outbound: 'DIRECT' },
-            { clash_mode: 'global', outbound: this.t('outboundNames.Node Select') },
             { action: 'sniff' },
-            { protocol: 'dns', action: 'hijack-dns' }
+            { protocol: 'dns', action: 'hijack-dns' },
+            { clash_mode: 'direct', outbound: 'DIRECT' },
+            { clash_mode: 'global', outbound: this.t('outboundNames.Node Select') }
         );
 
         this.config.route.auto_detect_interface = true;
