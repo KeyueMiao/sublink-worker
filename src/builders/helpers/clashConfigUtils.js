@@ -29,18 +29,18 @@ export function emitClashRules(rules = [], translator) {
         });
 
     rules
-        .filter(rule => Array.isArray(rule.site_rules) && rule.site_rules[0])
+        .filter(rule => Array.isArray(rule.site_rule_tags) && rule.site_rule_tags.length > 0)
         .forEach(rule => {
-            rule.site_rules.forEach(site => {
-                results.push(`RULE-SET,${site},${translator('outboundNames.' + rule.outbound)}`);
+            rule.site_rule_tags.forEach(tag => {
+                results.push(`RULE-SET,${tag},${translator('outboundNames.' + rule.outbound)}`);
             });
         });
 
     rules
-        .filter(rule => Array.isArray(rule.ip_rules) && rule.ip_rules[0])
+        .filter(rule => Array.isArray(rule.ip_rule_tags) && rule.ip_rule_tags.length > 0)
         .forEach(rule => {
-            rule.ip_rules.forEach(ip => {
-                results.push(`RULE-SET,${ip}-ip,${translator('outboundNames.' + rule.outbound)},no-resolve`);
+            rule.ip_rule_tags.forEach(tag => {
+                results.push(`RULE-SET,${tag},${translator('outboundNames.' + rule.outbound)},no-resolve`);
             });
         });
 

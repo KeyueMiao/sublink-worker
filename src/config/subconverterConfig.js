@@ -5,6 +5,7 @@
 
 import { createTranslator } from '../i18n/index.js';
 import { generateRules } from './ruleGenerators.js';
+import { isRemoteRuleSetUrl } from './ruleSetRefs.js';
 import { COUNTRY_DATA } from '../utils.js';
 import { DIRECT_DEFAULT_RULES } from './rules.js';
 
@@ -73,7 +74,13 @@ export function generateSubconverterConfig({ selectedRules = [], customRules = [
 		}
 		if (rule.site_rules) {
 			rule.site_rules.forEach(site => {
-				if (site) lines.push(`ruleset=${groupName},[]GEOSITE,${site}`);
+				if (!site) return;
+				if (isRemoteRuleSetUrl(site)) {
+					// Subconverter only understands category names for GEOSITE.
+					lines.push(`; custom rule set URL skipped, unsupported by subconverter: ${site.trim()}`);
+					return;
+				}
+				lines.push(`ruleset=${groupName},[]GEOSITE,${site}`);
 			});
 		}
 	});
@@ -84,7 +91,13 @@ export function generateSubconverterConfig({ selectedRules = [], customRules = [
 
 		if (rule.ip_rules) {
 			rule.ip_rules.forEach(ip => {
-				if (ip) lines.push(`ruleset=${groupName},[]GEOIP,${ip}`);
+				if (!ip) return;
+				if (isRemoteRuleSetUrl(ip)) {
+					// Subconverter only understands category names for GEOIP.
+					lines.push(`; custom rule set URL skipped, unsupported by subconverter: ${ip.trim()}`);
+					return;
+				}
+				lines.push(`ruleset=${groupName},[]GEOIP,${ip}`);
 			});
 		}
 		if (rule.ip_cidr) {

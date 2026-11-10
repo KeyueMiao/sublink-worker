@@ -121,7 +121,8 @@ describe.each(versions)('sing-box $version DNS fallback (issue #432)', ({ versio
         ]);
         const tags = config.route.rule_set.map(ruleSet => ruleSet.tag);
 
-        expect(tags).toEqual(['geolocation-cn', 'cn', 'geolocation-!cn', 'private-ip', 'cn-ip']);
+        // This fork keeps a site rule set on Private, so it precedes the implicit ones.
+        expect(tags).toEqual(['private', 'geolocation-cn', 'cn', 'geolocation-!cn', 'private-ip', 'cn-ip']);
         expect(config.route.rules).toContainEqual({
             rule_set: ['geolocation-cn', 'cn'],
             outbound: 'OtherCN'
@@ -251,14 +252,20 @@ describe('sing-box rule-set collection', () => {
         expect(customRules).toEqual(originalRules);
     });
 
-    it('continues to reject unsafe custom identifiers before collecting rule sets', () => {
-        const unsafeIds = ['../cn', '.hidden', 'a..b', 'https://evil.example/rule', 'cn?x=1', 'cn#fragment', 'a/b', 42, null];
+    it('rejects unsafe custom identifiers while accepting full rule set URLs', () => {
+        const unsafeIds = ['../cn', '.hidden', 'a..b', 'cn?x=1', 'cn#fragment', 'a/b', 42, null];
+        const customUrl = 'https://rules.example.com/custom.json';
         const { site_rule_sets, ip_rule_sets } = generateRuleSets(['Private'], [{
-            site: [...unsafeIds, ' safe-site.example '],
+            site: [...unsafeIds, ' safe-site.example ', customUrl],
             ip: [...unsafeIds, 'safe-net']
         }]);
 
-        expect(site_rule_sets.map(rule => rule.tag)).toEqual(['geolocation-cn', 'cn', 'geolocation-!cn', 'safe-site.example']);
+        // The selected Private rule brings its own site rule set before the implicit ones.
+        expect(site_rule_sets.map(rule => rule.tag)).toEqual([
+            'private', 'geolocation-cn', 'cn', 'geolocation-!cn', 'safe-site.example', 'custom'
+        ]);
+        // A full URL is used as given instead of being joined onto the repository base.
+        expect(site_rule_sets.find(rule => rule.tag === 'custom')).toMatchObject({ format: 'source', url: customUrl });
         expect(ip_rule_sets.map(rule => rule.tag)).toEqual(['private-ip', 'safe-net-ip']);
     });
 });

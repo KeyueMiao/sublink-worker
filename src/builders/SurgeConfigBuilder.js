@@ -1,8 +1,14 @@
 import { BaseConfigBuilder } from './BaseConfigBuilder.js';
 import { groupProxiesByCountry } from '../utils.js';
-import { SURGE_CONFIG, SURGE_SITE_RULE_SET_BASEURL, SURGE_IP_RULE_SET_BASEURL, generateRules, getOutbounds, PREDEFINED_RULE_SETS, DIRECT_DEFAULT_RULES } from '../config/index.js';
+import { SURGE_CONFIG, SURGE_SITE_RULE_SET_BASEURL, SURGE_IP_RULE_SET_BASEURL, generateRules, getOutbounds, PREDEFINED_RULE_SETS, DIRECT_DEFAULT_RULES, isRemoteRuleSetUrl } from '../config/index.js';
 import { addProxyWithDedup } from './helpers/proxyHelpers.js';
 import { buildSelectorMembers, buildNodeSelectMembers, buildCustomRuleMembers, uniqueNames } from './helpers/groupBuilder.js';
+
+// A custom rule set is either a name from the default repository or a full
+// URL; only names get the repository prefix and extension appended.
+function surgeRuleSetUrl(entry, baseUrl, ext) {
+    return isRemoteRuleSetUrl(entry) ? entry.trim() : `${baseUrl}${entry}${ext}`;
+}
 
 export class SurgeConfigBuilder extends BaseConfigBuilder {
     constructor(inputString, selectedRules, customRules, baseConfig, lang, userAgent, groupByCountry, includeAutoSelect = true) {
@@ -453,13 +459,13 @@ export class SurgeConfigBuilder extends BaseConfigBuilder {
 
         rules.filter(rule => rule.site_rules[0] !== '').map(rule => {
             rule.site_rules.forEach(site => {
-                finalConfig.push(`RULE-SET,${SURGE_SITE_RULE_SET_BASEURL}${site}.conf,${this.t('outboundNames.' + rule.outbound)}`);
+                finalConfig.push(`RULE-SET,${surgeRuleSetUrl(site, SURGE_SITE_RULE_SET_BASEURL, '.conf')},${this.t('outboundNames.' + rule.outbound)}`);
             });
         });
 
         rules.filter(rule => rule.ip_rules[0] !== '').map(rule => {
             rule.ip_rules.forEach(ip => {
-                finalConfig.push(`RULE-SET,${SURGE_IP_RULE_SET_BASEURL}${ip}.txt,${this.t('outboundNames.' + rule.outbound)},no-resolve`);
+                finalConfig.push(`RULE-SET,${surgeRuleSetUrl(ip, SURGE_IP_RULE_SET_BASEURL, '.txt')},${this.t('outboundNames.' + rule.outbound)},no-resolve`);
             });
         });
 

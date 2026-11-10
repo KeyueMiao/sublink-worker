@@ -108,32 +108,3 @@ export const PREDEFINED_RULE_SETS = {
 	comprehensive: UNIFIED_RULES.map(rule => rule.name)
 };
 
-// Generate SITE_RULE_SETS and IP_RULE_SETS from UNIFIED_RULES
-export const SITE_RULE_SETS = UNIFIED_RULES.reduce((acc, rule) => {
-	rule.site_rules.forEach(site_rule => {
-		acc[site_rule] = `${site_rule}.srs`;
-	});
-	return acc;
-}, {});
-
-export const IP_RULE_SETS = UNIFIED_RULES.reduce((acc, rule) => {
-	rule.ip_rules.forEach(ip_rule => {
-		acc[ip_rule] = `${ip_rule}.srs`;
-	});
-	return acc;
-}, {});
-
-// Generate CLASH_SITE_RULE_SETS and CLASH_IP_RULE_SETS for .mrs format
-export const CLASH_SITE_RULE_SETS = UNIFIED_RULES.reduce((acc, rule) => {
-	rule.site_rules.forEach(site_rule => {
-		acc[site_rule] = `${site_rule}.mrs`;
-	});
-	return acc;
-}, {});
-
-export const CLASH_IP_RULE_SETS = UNIFIED_RULES.reduce((acc, rule) => {
-	rule.ip_rules.forEach(ip_rule => {
-		acc[ip_rule] = `${ip_rule}.mrs`;
-	});
-	return acc;
-}, {});

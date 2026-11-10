@@ -164,6 +164,27 @@ export const CustomRules = (props) => {
                 />
             </div>
 
+            {/* GitHub mirror for the rule set URLs below */}
+            <div class="col-span-1 md:col-span-2 flex items-center justify-between gap-4 px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800">
+                <div class="flex items-center gap-1">
+                    <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{t('customRuleAccelerate')}</span>
+                    <i class="fas fa-info-circle text-gray-400 hover:text-primary-500 cursor-help" title={t('customRuleAccelerateTooltip')}></i>
+                </div>
+                <button
+                    type="button"
+                    role="switch"
+                    x-bind:aria-checked="rule.accelerate ? 'true' : 'false'"
+                    x-on:click="rule.accelerate = !rule.accelerate"
+                    x-bind:class="rule.accelerate ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-600'"
+                    class="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                >
+                    <span
+                        class="inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200"
+                        x-bind:class="rule.accelerate ? 'translate-x-6' : 'translate-x-1'"
+                    ></span>
+                </button>
+            </div>
+
             {/* Geo-Site */}
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1">
@@ -214,7 +235,7 @@ export const CustomRules = (props) => {
           id="customRulesJson"
           name="customRulesJson"
           model="jsonContent"
-          placeholder='[{"name": "MyRule", "src_ip_cidr": "192.168.1.13/32", "domain_suffix": "example.com", "outbound": "Proxy"}]'
+          placeholder='[{"name": "MyRule", "domain_suffix": "example.com"}, {"name": "MySites", "site": "https://github.com/me/rules/raw/main/sites.srs", "accelerate": true}]'
           variant="mono"
           textareaClass="min-h-[16rem]"
           containerClass="group"
@@ -302,6 +323,7 @@ export const CustomRules = (props) => {
                 protocol: '',
                 site: '',
                 ip: '',
+                accelerate: false,
                 outbound: '' // Will be set to name by default in backend or needs explicit field? 
                              // In original logic, outbound name IS the rule name for custom rules.
               });

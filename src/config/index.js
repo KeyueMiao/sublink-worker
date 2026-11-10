@@ -5,6 +5,7 @@
 
 // Rule URLs
 export {
+	GITHUB_ACCELERATOR_PREFIX,
 	SITE_RULE_SET_BASE_URL,
 	IP_RULE_SET_BASE_URL,
 	CLASH_SITE_RULE_SET_BASE_URL,
@@ -13,17 +14,16 @@ export {
 	SURGE_IP_RULE_SET_BASEURL
 } from './ruleUrls.js';
 
+// Rule set references: a custom rule set is a built-in name or a full URL
+export { isRemoteRuleSetUrl } from './ruleSetRefs.js';
+
 // Rules
 export {
 	CUSTOM_RULES,
 	UNIFIED_RULES,
 	PREDEFINED_RULE_SETS,
 	DIRECT_DEFAULT_RULES,
-	REJECT_ACTION_RULES,
-	SITE_RULE_SETS,
-	IP_RULE_SETS,
-	CLASH_SITE_RULE_SETS,
-	CLASH_IP_RULE_SETS
+	REJECT_ACTION_RULES
 } from './rules.js';
 
 // Rule Generators

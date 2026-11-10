@@ -26,6 +26,16 @@ describe('Worker', () => {
         expect(text).toContain('Sublink Worker');
     });
 
+    it('GET / renders the custom rule GitHub mirror switch', async () => {
+        const app = createTestApp();
+        const res = await app.request('http://localhost/?lang=zh-CN');
+        const text = await res.text();
+
+        expect(text).toContain('role="switch"');
+        expect(text).toContain('GitHub 加速');
+        expect(text).toContain('accelerate: false');
+    });
+
     it('GET /singbox returns JSON', async () => {
         const app = createTestApp();
         const config = 'vmess://ew0KICAidiI6ICIyIiwNCiAgInBzIjogInRlc3QiLA0KICAiYWRkIjogIjEuMS4xLjEiLA0KICAicG9ydCI6ICI0NDMiLA0KICAiaWQiOiAiYWRkNjY2NjYtODg4OC04ODg4LTg4ODgtODg4ODg4ODg4ODg4IiwNCiAgImFpZCI6ICIwIiwNCiAgInNjeSI6ICJhdXRvIiwNCiAgIm5ldCI6ICJ3cyIsDQogICJ0eXBlIjogIm5vbmUiLA0KICAiaG9zdCI6ICIiLA0KICAicGF0aCI6ICIvIiwNCiAgInRscyI6ICJ0bHMiDQp9';
